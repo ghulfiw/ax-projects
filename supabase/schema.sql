@@ -132,4 +132,4 @@ alter publication supabase_realtime add table
 
 -- The first owner. Replace the address with the email you will sign in with.
 insert into public.members (email, name, role)
-values (lower('replace-with-your-email@example.com'), 'Ghulfi', 'owner');
+values (lower('ghulfiwork@gmail.com'), 'Ghulfi', 'owner');

@@ -5,7 +5,9 @@
   const TS = ["todo", "doing", "review", "done"];
   const TL = { todo: "To do", doing: "In progress", review: "Review", done: "Done" };
   const VIEWS = ["portfolio", "tasks", "weekly", "members"];
-  const DEPTS = ["HR", "Finance", "Creative", "Strategy", "New Business", "B2B (Telesales)", "Digital (SEIN account)", "IT"];
+  const DEPTS = ["Account", "Creative", "Strategy", "Digital", "Media", "New Business", "Data & Tech", "HR", "Finance", "IT"];
+  const CL = { SEIN: "SEIN", NSS: "NSS", Internal: "Internal" };
+  const CLL = { SEIN: "SEIN (Samsung)", NSS: "NSS (non-Samsung client)", Internal: "Internal (no client)" };
 
   const $ = (s) => document.querySelector(s);
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -28,13 +30,16 @@
   }
   const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
 
-  let me = "", role = null, P = [], T = [], U = [], C = [], M = [], fP = "", fO = "", fD = "", chan = null, rt = 0;
+  let me = "", role = null, P = [], T = [], U = [], C = [], M = [], fP = "", fO = "", fD = "", fC = "", chan = null, rt = 0;
   let openKind = null, openId = null; // which dialog is open, for live comment refresh
   const canEdit = () => role === "owner" || role === "editor";
   const sortedP = () => [...P].sort((a, b) => (a.sort ?? 99) - (b.sort ?? 99) || String(a.name).localeCompare(b.name));
   const pn = (id) => (P.find((p) => p.id === id) || {}).name || "No project";
   const nm = (email) => (M.find((m) => m.email === email) || {}).name || String(email || "Someone").split("@")[0];
-  const depts = () => [...new Set([...P.map((p) => p.department).filter(Boolean), ...DEPTS])].sort();
+  const deps = (p) => (Array.isArray(p.departments) ? p.departments : []).filter(Boolean);
+  const cl = (p) => (CL[p.client] ? p.client : "Internal");
+  const clientText = (p) => CL[cl(p)] + (p.client_detail ? " · " + p.client_detail : "");
+  const depts = () => [...new Set([...DEPTS, ...P.flatMap(deps)])];
   const pComments = (id) => C.filter((c) => c.project_id === id && !c.task_id);
   const tComments = (id) => C.filter((c) => c.task_id === id);
   const openAll = (pid) => C.filter((c) => c.project_id === pid && !c.resolved).length;
@@ -137,20 +142,22 @@
     $("#kpis").innerHTML = K.map(([l, v, c]) => `<div class="kpi"><b class="num ${c}">${v}</b><span>${l}</span></div>`).join("");
     $("#phh").innerHTML = PH.map((p) => `<span>${p}</span>`).join("");
 
-    const used = [...new Set(P.map((p) => p.department).filter(Boolean))].sort();
+    const used = [...new Set(P.flatMap(deps))].sort();
     if (fD && !used.includes(fD)) fD = "";
     $("#fD").innerHTML = `<option value="">All departments</option>` + used.map((d) => `<option value="${esc(d)}"${d === fD ? " selected" : ""}>${esc(d)}</option>`).join("");
-    const shown = ps.filter((p) => !fD || p.department === fD);
+    $("#fC").innerHTML = `<option value="">All clients</option>` + Object.keys(CL).map((c) => `<option value="${c}"${c === fC ? " selected" : ""}>${CLL[c]}</option>`).join("");
+    const shown = ps.filter((p) => (!fD || deps(p).includes(fD)) && (!fC || cl(p) === fC));
     $("#pipe").innerHTML = shown.length ? shown.map((p) => {
       const i = Math.max(0, PH.indexOf(p.phase)), c = stc(p.status), pct = (k) => (k / (PH.length - 1)) * 100;
       const oc = openAll(p.id);
       return `<button class="row" data-p="${esc(p.id)}">
-        <div><b>${esc(p.name)}</b><small>${esc(p.area)}</small>${p.department ? `<span class="dept">${esc(p.department)}</span>` : ""}
+        <div><b>${esc(p.name)}</b><small>${esc(p.area)}</small>
+          <div class="chips tags"><span class="cl cl-${cl(p)}" title="Client">${esc(clientText(p))}</span>${deps(p).map((d) => `<span class="dept" title="Related department">${esc(d)}</span>`).join("")}</div>
           <div class="chips"><span class="pill ${c}">${ST[c]} · ${esc(PH[i])}</span>${oc ? `<span class="badge">${oc} comment${oc > 1 ? "s" : ""}</span>` : ""}</div></div>
         <div class="track ${c}" aria-label="Phase ${esc(PH[i])} of ${PH.length}"><span class="fill" style="width:${pct(i)}%"></span>${PH.map((_, k) => `<span class="st${k <= i ? " on" : ""}" style="left:${pct(k)}%"></span>`).join("")}<span class="cur" style="left:${pct(i)}%"></span></div>
         <div class="ms">${esc(p.next) || "Next milestone not set"}<br><em>${p.next_date ? "by " + esc(fd(p.next_date)) : "date to confirm"}</em>${p.blocker ? `<br><span class="block">Blocker: ${esc(p.blocker)}</span>` : ""}</div>
       </button>`;
-    }).join("") : `<p class="empty">${P.length ? "No projects in this department." : "No projects yet."}</p>`;
+    }).join("") : `<p class="empty">${P.length ? "No projects match these filters." : "No projects yet."}</p>`;
 
     const lg = U.filter((u) => days(u.date) <= 14).sort((a, b) => String(b.date).localeCompare(a.date));
     $("#log").innerHTML = lg.length
@@ -189,7 +196,7 @@
     o += `\nBy project:\n`;
     for (const p of ps) {
       const wk = U.filter((u) => u.project_id === p.id && days(u.date) <= 7);
-      o += `\n${p.name}${p.department ? " (" + p.department + ")" : ""} [${ST[stc(p.status)]} · ${p.phase || "Idea"}]\n`;
+      o += `\n${p.name} [${ST[stc(p.status)]} · ${p.phase || "Idea"}]\n  Client: ${clientText(p)}${deps(p).length ? " · Departments: " + deps(p).join(", ") : ""}\n`;
       o += wk.length ? wk.map((u) => `  – ${u.text}`).join("\n") + "\n" : `  – No change this week\n`;
       if (p.next) o += `  Next: ${p.next}${p.next_date ? " (by " + fd(p.next_date) + ")" : ""}\n`;
       if (p.blocker) o += `  Blocker: ${p.blocker}\n`;
@@ -237,6 +244,8 @@
     }).join("") : `<p class="empty">No comments yet.</p>`;
   }
 
+  const deptBox = (d, on, ro) => `<label class="ck"><input type="checkbox" value="${esc(d)}"${on ? " checked" : ""}${ro ? " disabled" : ""}><span>${esc(d)}</span></label>`;
+
   function openP(id) {
     const p = P.find((x) => x.id === id) || { phase: "Idea", status: "ok" };
     const ro = !canEdit(), dis = ro ? " disabled" : "";
@@ -246,8 +255,11 @@
     dlg.innerHTML = `<h2>${id ? esc(p.name) : "New project"}</h2>
       <form class="f" id="pf">
         <label class="w2">Project name<input id="p-name" required maxlength="120" value="${esc(p.name)}"${dis}></label>
-        <label>Client or area<input id="p-area" value="${esc(p.area)}"${dis}></label>
-        <label>Related department<input id="p-dept" list="deptlist" value="${esc(p.department)}"${dis}><datalist id="deptlist">${depts().map((d) => `<option value="${esc(d)}">`).join("")}</datalist></label>
+        <label class="w2">Short description<input id="p-area" value="${esc(p.area)}"${dis}></label>
+        <label>Client<select id="p-client"${dis}>${Object.keys(CL).map((c) => `<option value="${c}"${c === cl(p) ? " selected" : ""}>${CLL[c]}</option>`).join("")}</select></label>
+        <label>Client team or name<input id="p-cdet" placeholder="e.g. B2B, D2C, or the NSS client's name" value="${esc(p.client_detail)}"${dis}></label>
+        <fieldset class="w2 depts"><legend>Related departments (Cheil)</legend><div class="chips" id="p-depts">${depts().map((d) => deptBox(d, deps(p).includes(d), ro)).join("")}</div>
+          ${ro ? "" : `<div class="adddept"><input id="p-newdept" placeholder="Another department"><button type="button" class="ghost small" id="p-adddept">Add</button></div>`}</fieldset>
         <label>Owner<input id="p-owner" value="${esc(p.owner)}"${dis}></label>
         <label>Phase<select id="p-phase"${dis}>${opt(PH, p.phase)}</select></label>
         <label>Status<select id="p-status"${dis}>${opt(Object.keys(ST), stc(p.status), ST)}</select></label>
@@ -264,12 +276,27 @@
     ov.classList.add("show");
     $("#pcl").onclick = close;
     if (id) wireComments(id, null);
+    const ad = $("#p-adddept");
+    if (ad) {
+      const add = () => {
+        const v = $("#p-newdept").value.trim();
+        if (!v) return;
+        const ex = [...document.querySelectorAll("#p-depts input")].find((x) => x.value.toLowerCase() === v.toLowerCase());
+        if (ex) ex.checked = true;
+        else $("#p-depts").insertAdjacentHTML("beforeend", deptBox(v, true, false));
+        $("#p-newdept").value = "";
+      };
+      ad.onclick = add;
+      $("#p-newdept").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); add(); } };
+    }
     const sv = $("#psv");
     if (sv) sv.onclick = async () => {
       const name = $("#p-name").value.trim();
       if (!name) { $("#p-name").focus(); return; }
       const d = {
-        name, area: $("#p-area").value.trim(), department: $("#p-dept").value.trim(), owner: $("#p-owner").value.trim(),
+        name, area: $("#p-area").value.trim(), owner: $("#p-owner").value.trim(),
+        client: $("#p-client").value, client_detail: $("#p-cdet").value.trim(),
+        departments: [...document.querySelectorAll("#p-depts input:checked")].map((x) => x.value),
         phase: $("#p-phase").value, status: $("#p-status").value,
         next: $("#p-next").value.trim(), next_date: $("#p-date").value || null,
         blocker: $("#p-block").value.trim(), summary: $("#p-sum").value.trim(),
@@ -419,6 +446,7 @@
   $("#fP").onchange = (e) => { fP = e.target.value; render(); };
   $("#fO").onchange = (e) => { fO = e.target.value; render(); };
   $("#fD").onchange = (e) => { fD = e.target.value; render(); };
+  $("#fC").onchange = (e) => { fC = e.target.value; render(); };
   $("#copy").onclick = async () => {
     const b = $("#copy");
     try { await navigator.clipboard.writeText(digest()); b.textContent = "Copied"; }

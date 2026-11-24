@@ -55,6 +55,22 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .hctl select{width:auto;min-width:11em;font:500 14px Poppins,sans-serif}
 .dept{display:inline-block;font-size:12px;font-weight:600;color:var(--navy);background:color-mix(in srgb,var(--navyf) 10%,transparent);border-radius:6px;padding:1px 8px;margin:3px 0 4px;white-space:nowrap}
 .chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tags{margin:5px 0 6px}
+.tags .dept{margin:0}
+.cl{display:inline-block;font-size:12px;font-weight:600;border-radius:6px;padding:1px 8px;white-space:nowrap}
+.cl-SEIN{background:var(--navyf);color:#fff}
+.cl-NSS{background:var(--mint);color:var(--mintk)}
+.cl-Internal{background:transparent;color:var(--mut);border:1px solid var(--line)}
+fieldset.depts{border:0;margin:0;padding:0;min-width:0}
+fieldset.depts legend{font-size:13px;color:var(--mut);padding:0;margin-bottom:6px}
+.ck{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--line);border-radius:999px;padding:6px 12px;font-size:14px;color:var(--ink);cursor:pointer;min-height:36px}
+.f label.ck{flex-direction:row;gap:6px;font-size:14px;color:var(--ink)}
+.f label.ck:has(input:checked){color:#fff}
+.ck input{width:auto;min-height:0;margin:0;accent-color:var(--navyf)}
+.ck:has(input:checked){background:var(--navyf);border-color:var(--navyf);color:#fff}
+.ck:has(input:disabled){cursor:default}
+.adddept{display:flex;gap:8px;margin-top:8px;max-width:360px}
+.adddept input{min-height:36px;padding:6px 10px}
 .badge{white-space:nowrap;background:var(--mint);color:var(--mintk);border-radius:999px;padding:2px 10px;font-size:13px;font-family:Poppins,sans-serif}
 .log{margin-top:20px}
 .log ul{list-style:none;margin:0;padding:0}
@@ -164,7 +180,7 @@ th{color:var(--mut);font-weight:500;font-size:13px;border-top:0}
 <section id="v-portfolio">
  <div class="kpis" id="kpis"></div>
  <div class="panel">
-  <h2>Where each project stands <span class="hctl"><select id="fD" aria-label="Filter by department"></select><button class="ghost w" id="addP">Add project</button></span></h2>
+  <h2>Where each project stands <span class="hctl"><select id="fC" aria-label="Filter by client"></select><select id="fD" aria-label="Filter by department"></select><button class="ghost w" id="addP">Add project</button></span></h2>
   <div class="pipe-head"><span>Project</span><div class="phases" id="phh"></div><span>Next milestone</span></div>
   <div id="pipe"></div>
  </div>

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AX Project Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cal+Sans&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:light dark;--bg:light-dark(#fff,#0e0f22);--ink:light-dark(#111216,#eceef8);--navy:light-dark(#1C1D4F,#c8ccf6);--navyf:light-dark(#1C1D4F,#3a3d86);--card:light-dark(#F4F4F2,#191a36);--mint:light-dark(#B8E8D3,#2c6b52);--mintk:light-dark(#0f5a3c,#c9f3e0);--line:light-dark(#dedfd8,#2d2f58);--mut:light-dark(#5c5e70,#a4a7c4);--ok:light-dark(#1d8a58,#5ed39b);--risk:light-dark(#b87500,#f3b94c);--block:light-dark(#c93636,#ff7d7d);--done:var(--navy)}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 Poppins,system-ui,sans-serif;overflow-x:clip}
+h1,h2,h3,.num{font-family:"Cal Sans",Poppins,system-ui,sans-serif;font-weight:400;letter-spacing:-.01em;margin:0}
+.wrap{max-width:1240px;margin:0 auto;padding:clamp(20px,3.5vw,44px) max(4vw,16px) 56px}
+header{display:flex;flex-wrap:wrap;gap:16px 24px;align-items:flex-end;justify-content:space-between}
+h1{font-size:clamp(32px,4.4vw,46px);line-height:1.05}
+.sub{color:var(--mut);margin:6px 0 0}
+.key{color:var(--navy);font-weight:600;font-size:17px;margin:18px 0 0;text-wrap:balance}
+nav{display:flex;gap:4px;background:var(--card);border-radius:999px;padding:4px;flex-wrap:wrap}
+nav a{padding:9px 16px;border-radius:999px;color:var(--ink);text-decoration:none;font-weight:500;min-height:40px;display:flex;align-items:center}
+nav a[aria-current=page]{background:var(--navyf);color:#fff}
+.who{display:flex;gap:10px;align-items:center;font-size:13px;color:var(--mut);margin-top:6px;flex-wrap:wrap}
+.who button{min-height:32px;padding:4px 12px;font-size:13px}
+button{font:500 15px/1.3 Poppins,system-ui,sans-serif;letter-spacing:0;border:0;border-radius:999px;padding:10px 18px;min-height:44px;cursor:pointer;background:var(--navyf);color:#fff}
+button.ghost{background:transparent;color:var(--navy);border:1.5px solid var(--line)}
+button.small{min-height:32px;padding:4px 12px;font-size:13px}
+button:disabled{opacity:.6;cursor:default}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--mint);outline-offset:2px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5em,1fr));gap:12px;margin:26px 0}
+.kpi{background:var(--card);border-radius:16px;padding:14px 18px}
+.kpi .num{font-size:clamp(30px,3.6vw,40px);line-height:1.1;display:block}
+.kpi span{color:var(--mut);font-size:13px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;align-items:start}
+.panel{background:var(--card);border-radius:20px;padding:20px}
+.panel h2 button{white-space:nowrap;flex:none}
+.panel h2{font-size:22px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.pipe-head,.row{display:grid;grid-template-columns:200px minmax(0,1fr) 210px;gap:16px;align-items:center}
+.pipe-head{color:var(--mut);font-size:13px;padding:0 12px 8px}
+.phases{display:flex;justify-content:space-between;padding:0 4px}
+.row{background:var(--bg);border-radius:14px;padding:12px;margin-bottom:8px;cursor:pointer;border:1.5px solid transparent;width:100%;text-align:left;color:var(--ink);font:inherit;min-height:0}
+.row:hover{border-color:var(--line)}
+.row b{display:block;font-weight:600;line-height:1.3}
+.row small{color:var(--mut);font-size:13px;display:block}
+.track{position:relative;height:28px;margin:0 9px}
+.track::before{content:"";position:absolute;left:0;right:0;top:12px;height:4px;border-radius:4px;background:var(--line)}
+.fill{position:absolute;left:0;top:12px;height:4px;border-radius:4px;background:var(--navyf)}
+.st{position:absolute;top:9px;width:10px;height:10px;margin-left:-5px;border-radius:50%;background:var(--line)}
+.st.on{background:var(--navyf)}
+.cur{position:absolute;top:4px;width:20px;height:20px;margin-left:-10px;border-radius:50%;border:4px solid var(--bg);box-shadow:0 0 0 2px currentColor;background:currentColor}
+.ok{color:var(--ok)}.risk{color:var(--risk)}.block{color:var(--block)}.done{color:var(--done)}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;white-space:nowrap}
+.pill::before{content:"";width:9px;height:9px;border-radius:50%;background:currentColor}
+.ms{font-size:13px;line-height:1.4}
+.ms em{font-style:normal;color:var(--mut);white-space:nowrap}
+.ask{background:var(--bg);border-radius:14px;padding:12px 14px;margin-bottom:8px}
+.ask b{display:block;font-size:13px;color:var(--navy)}
+.ask p{margin:2px 0 8px}
+.ask .meta{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;color:var(--mut);flex-wrap:wrap}
+.badge{white-space:nowrap;background:var(--mint);color:var(--mintk);border-radius:999px;padding:2px 10px;font-size:13px;font-family:Poppins,sans-serif}
+.log{margin-top:20px}
+.log ul{list-style:none;margin:0;padding:0}
+.log li{display:grid;grid-template-columns:5.5em 12em minmax(0,1fr);gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.log time{color:var(--mut);white-space:nowrap;font-size:13px}
+.log .pn{font-weight:600;font-size:14px}
+.empty{color:var(--mut);padding:8px 0}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin:24px 0 16px}
+.bar label{font-size:13px;color:var(--mut);display:flex;flex-direction:column;gap:2px}
+input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:9px 11px;min-height:44px;width:100%}
+textarea{min-height:76px;resize:vertical}
+.kan{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;align-items:start}
+.col{background:var(--card);border-radius:18px;padding:14px;min-height:160px}
+.col h3{font-size:18px;margin:0 0 10px;display:flex;justify-content:space-between}
+.col h3 span{font-family:Poppins,sans-serif;font-size:13px;color:var(--mut)}
+.task{background:var(--bg);border-radius:12px;padding:10px 12px;margin-bottom:8px;cursor:pointer;border:1.5px solid transparent;display:block;width:100%;text-align:left;color:var(--ink);font:inherit;min-height:0}
+.task:hover{border-color:var(--line)}
+.task b{font-weight:500;display:block;line-height:1.35}
+.task small{display:flex;flex-wrap:wrap;gap:4px 10px;color:var(--mut);font-size:13px;margin-top:4px}
+.late{color:var(--block)!important;font-weight:600}
+pre{background:var(--card);border-radius:16px;padding:20px;white-space:pre-wrap;font:14px/1.6 Poppins,sans-serif;margin:0}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:10px 8px;border-top:1px solid var(--line);vertical-align:middle}
+th{color:var(--mut);font-weight:500;font-size:13px;border-top:0}
+.addm{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 9em auto;gap:10px;align-items:end;margin-top:16px}
+.addm label{font-size:13px;color:var(--mut);display:flex;flex-direction:column;gap:2px}
+.note{font-size:13px;color:var(--mut);margin-top:22px}
+.ov{position:fixed;inset:0;background:rgba(10,11,30,.45);display:none;align-items:flex-start;justify-content:center;padding:4vh 16px;overflow:auto;z-index:9}
+.ov.show{display:flex}
+.dlg{background:var(--bg);border-radius:20px;width:min(680px,100%);padding:22px}
+.dlg h2{font-size:26px;margin-bottom:14px}
+.f{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.f label{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--mut)}
+.f .w2{grid-column:1/-1}
+.acts{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;margin-top:16px}
+.acts div{display:flex;gap:10px;flex-wrap:wrap}
+.sec{margin-top:20px;border-top:1px solid var(--line);padding-top:14px}
+.sec h3{font-size:19px;margin-bottom:8px}
+.sec p{margin:4px 0;font-size:14px}
+.cm{background:var(--card);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.cm.res{opacity:.65}
+.cm .h{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--mut);flex-wrap:wrap}
+.cm .h b{color:var(--ink);font-weight:600}
+.cm p{margin:4px 0 0;white-space:pre-wrap}
+.cm .ca{display:flex;gap:6px;margin-top:6px}
+.cmf{display:flex;gap:10px;align-items:flex-end;margin-top:8px}
+.cmf textarea{min-height:60px}
+.gate{max-width:440px;margin:12vh auto;padding:0 16px}
+.gate h1{margin-bottom:8px}
+.gate form{display:flex;flex-direction:column;gap:10px;margin-top:20px}
+.gate code{background:var(--card);padding:1px 6px;border-radius:6px;overflow-wrap:anywhere}
+#msg,#gmsg{font-size:13px;color:var(--mut);min-height:1.2em;margin-top:8px}
+.ro .w{display:none!important}
+.ro .task{cursor:default}
+.own{display:none!important}
+.isowner .own{display:revert!important}
+[hidden]{display:none!important}
+@media(max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}.kan{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:720px){.pipe-head{display:none}.row{grid-template-columns:minmax(0,1fr);gap:8px}.log li{grid-template-columns:5em minmax(0,1fr)}.log li .pn,.log li span:last-child{grid-column:2}.addm{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:560px){.kan{grid-template-columns:minmax(0,1fr)}.f{grid-template-columns:minmax(0,1fr)}nav{width:100%;flex-wrap:nowrap;overflow-x:auto}nav a{flex:1 0 auto;justify-content:center;padding:9px 12px;white-space:nowrap;font-size:14px}.cmf{flex-direction:column;align-items:stretch}td,th{padding:8px 4px;font-size:13px}}
+@media(prefers-reduced-motion:no-preference){.fill{transition:width .5s ease}}
+</style>
+</head>
+<body>
+
+<section id="setup" class="gate" hidden>
+ <h1>Almost there</h1>
+ <p>Add your Supabase project URL and anon key to <code>config.js</code>, then redeploy. The README has the steps.</p>
+</section>
+
+<section id="signin" class="gate" hidden>
+ <h1>AX Project Tracker</h1>
+ <p class="sub">Cheil Indonesia · Data &amp; Technology</p>
+ <form id="sif">
+  <label for="si-email" class="sub">Work email</label>
+  <input id="si-email" type="email" autocomplete="email" required>
+  <button id="si-btn">Email me a sign-in link</button>
+ </form>
+ <div id="gmsg" role="status"></div>
+</section>
+
+<section id="noaccess" class="gate" hidden>
+ <h1>No access yet</h1>
+ <p>You're signed in as <b id="na-email"></b>, but this address isn't on the tracker's members list. Ask the tracker owner to add you.</p>
+ <button class="ghost" id="na-out">Sign out</button>
+</section>
+
+<div id="app" class="wrap" hidden>
+<header>
+ <div>
+  <h1>AX Project Tracker</h1>
+  <p class="sub">Cheil Indonesia · Data &amp; Technology · <span id="upd">loading…</span></p>
+  <div class="who"><span id="who"></span><button class="ghost" id="out">Sign out</button></div>
+ </div>
+ <nav aria-label="Views">
+  <a href="#portfolio" data-v="portfolio">Portfolio</a>
+  <a href="#tasks" data-v="tasks">Tasks</a>
+  <a href="#weekly" data-v="weekly">Weekly update</a>
+  <a href="#members" data-v="members" class="own">Members</a>
+ </nav>
+</header>
+<p class="key" id="key"></p>
+<div id="msg" role="status"></div>
+
+<section id="v-portfolio">
+ <div class="kpis" id="kpis"></div>
+ <div class="grid">
+  <div class="panel">
+   <h2>Where each project stands <button class="ghost w" id="addP">Add project</button></h2>
+   <div class="pipe-head"><span>Project</span><div class="phases" id="phh"></div><span>Next milestone</span></div>
+   <div id="pipe"></div>
+  </div>
+  <div class="panel">
+   <h2>Needs your decision <span class="badge" id="askN">0</span></h2>
+   <div id="asks"></div>
+  </div>
+ </div>
+ <div class="panel log">
+  <h2>Changed in the last 14 days</h2>
+  <ul id="log"></ul>
+ </div>
+</section>
+
+<section id="v-tasks" hidden>
+ <div class="bar">
+  <label>Project<select id="fP"></select></label>
+  <label>Owner<select id="fO"></select></label>
+  <span style="flex:1"></span>
+  <button class="w" id="addT">Add task</button>
+ </div>
+ <div class="kan" id="kan"></div>
+</section>
+
+<section id="v-weekly" hidden>
+ <div class="bar"><span class="sub" style="margin:0">Ready to paste into email or WhatsApp. Built from the updates logged in the last 7 days.</span><span style="flex:1"></span><button id="copy">Copy update</button></div>
+ <pre id="dig"></pre>
+</section>
+
+<section id="v-members" hidden>
+ <div class="panel" style="margin-top:24px">
+  <h2>Members</h2>
+  <p class="sub" style="margin-top:0">Owners manage members. Editors change projects, tasks and updates. Viewers read and comment. People sign in with the email listed here.</p>
+  <div style="overflow-x:auto"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr></thead><tbody id="mem"></tbody></table></div>
+  <form class="addm" id="mf">
+   <label>Name<input id="m-name"></label>
+   <label>Email<input id="m-email" type="email" required></label>
+   <label>Role<select id="m-role"><option value="viewer">Viewer</option><option value="editor">Editor</option><option value="owner">Owner</option></select></label>
+   <button>Add member</button>
+  </form>
+ </div>
+</section>
+
+<p class="note">Click a project to see its history and comments<span class="w">, edit it, or log an update</span>.</p>
+</div>
+
+<div class="ov" id="ov"><div class="dlg" role="dialog" aria-modal="true" id="dlg"></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

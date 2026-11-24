@@ -1,10 +1,11 @@
-// AX Project Tracker — front end. Data and access rules live in Supabase (see supabase/schema.sql).
+// AX Project Tracker — front end. Data and access rules live in Supabase (see supabase/).
 (() => {
   const PH = ["Idea", "Scoping", "Build", "Pilot", "Live"];
   const ST = { ok: "On track", risk: "At risk", block: "Blocked", done: "Done" };
   const TS = ["todo", "doing", "review", "done"];
   const TL = { todo: "To do", doing: "In progress", review: "Review", done: "Done" };
   const VIEWS = ["portfolio", "tasks", "weekly", "members"];
+  const DEPTS = ["HR", "Finance", "Creative", "Strategy", "New Business", "B2B (Telesales)", "Digital (SEIN account)", "IT"];
 
   const $ = (s) => document.querySelector(s);
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -18,6 +19,7 @@
   const stc = (s) => (ST[s] ? s : "ok");
   const show = (id) => { for (const s of ["setup", "signin", "noaccess", "app"]) $("#" + s).hidden = s !== id; };
   const msg = (t) => { $("#msg").textContent = t || ""; };
+  const gmsg = (t) => { $("#gmsg").textContent = t || ""; };
 
   const cfg = window.AX_CONFIG || {};
   if (!window.supabase || !cfg.supabaseUrl || cfg.supabaseUrl.includes("YOUR-PROJECT") || !cfg.supabaseAnonKey || cfg.supabaseAnonKey.startsWith("YOUR-")) {
@@ -26,12 +28,16 @@
   }
   const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
 
-  let me = "", role = null, P = [], T = [], U = [], C = [], M = [], fP = "", fO = "", chan = null, rt = 0, openId = null;
+  let me = "", role = null, P = [], T = [], U = [], C = [], M = [], fP = "", fO = "", fD = "", chan = null, rt = 0;
+  let openKind = null, openId = null; // which dialog is open, for live comment refresh
   const canEdit = () => role === "owner" || role === "editor";
   const sortedP = () => [...P].sort((a, b) => (a.sort ?? 99) - (b.sort ?? 99) || String(a.name).localeCompare(b.name));
   const pn = (id) => (P.find((p) => p.id === id) || {}).name || "No project";
   const nm = (email) => (M.find((m) => m.email === email) || {}).name || String(email || "Someone").split("@")[0];
-  const openC = (id) => C.filter((c) => c.project_id === id && !c.resolved).length;
+  const depts = () => [...new Set([...P.map((p) => p.department).filter(Boolean), ...DEPTS])].sort();
+  const pComments = (id) => C.filter((c) => c.project_id === id && !c.task_id);
+  const tComments = (id) => C.filter((c) => c.task_id === id);
+  const openAll = (pid) => C.filter((c) => c.project_id === pid && !c.resolved).length;
   const fail = (e) => { msg(e?.message ? "Couldn't save: " + e.message : "Couldn't save. Try again."); };
 
   // ---------- auth ----------
@@ -42,7 +48,7 @@
     me = String(session.user.email || "").toLowerCase();
     const { data, error } = await sb.rpc("my_role");
     if (seq !== startSeq) return;
-    if (error) { show("signin"); $("#gmsg").textContent = "Couldn't check your access: " + error.message; return; }
+    if (error) { show("signin"); gmsg("Couldn't check your access: " + error.message); return; }
     role = data || null;
     if (!role) { $("#na-email").textContent = me; show("noaccess"); return; }
     document.body.classList.toggle("ro", !canEdit());
@@ -63,12 +69,23 @@
   $("#sif").addEventListener("submit", async (e) => {
     e.preventDefault();
     const email = $("#si-email").value.trim().toLowerCase();
+    const password = $("#si-pass").value;
     if (!email) return;
+    if (!password) { gmsg("Enter your password, or use the sign-in link below."); $("#si-pass").focus(); return; }
     const b = $("#si-btn");
+    b.disabled = true;
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    b.disabled = false;
+    gmsg(error ? (error.message === "Invalid login credentials" ? "Wrong email or password." : "Couldn't sign in: " + error.message) : "");
+  });
+  $("#si-link").addEventListener("click", async () => {
+    const email = $("#si-email").value.trim().toLowerCase();
+    if (!email || !$("#si-email").checkValidity()) { gmsg("Enter your work email first."); $("#si-email").focus(); return; }
+    const b = $("#si-link");
     b.disabled = true;
     const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
     b.disabled = false;
-    $("#gmsg").textContent = error ? "Couldn't send the link: " + error.message : "Check your inbox for a sign-in link from Supabase. It can take a minute.";
+    gmsg(error ? "Couldn't send the link: " + error.message : "Check your inbox for a sign-in link. It can take a minute.");
   });
   const signOut = async () => { if (chan) { sb.removeChannel(chan); chan = null; } await sb.auth.signOut(); };
   $("#out").onclick = signOut;
@@ -82,11 +99,11 @@
       q("comments").order("created_at"), q("members").order("email"),
     ]);
     const err = [p, t, u, c, m].find((r) => r.error);
-    if (err) { msg("Couldn't load everything: " + err.error.message); }
+    if (err) msg("Couldn't load everything: " + err.error.message);
     else msg("");
     P = p.data || []; T = t.data || []; U = u.data || []; C = c.data || []; M = m.data || [];
     render();
-    if (openId && $("#ov").classList.contains("show") && $("#cmlist")) renderComments(openId);
+    if (openKind && $("#cmlist")) renderComments();
   }
 
   // ---------- routing ----------
@@ -107,14 +124,12 @@
     const n = (s) => P.filter((p) => stc(p.status) === s).length;
     const open = T.filter((t) => t.status !== "done");
     const late = open.filter((t) => t.due && days(t.due) > 0);
-    const asks = ps.filter((p) => p.ceo_ask);
 
     const last = [...P.map((p) => p.updated_at), ...U.map((u) => u.created_at)].filter(Boolean).sort().pop();
     $("#upd").textContent = last ? "last updated " + fd(last) + " " + String(last).slice(0, 4) : "no updates yet";
     $("#key").textContent = P.length
       ? `${n("ok")} of ${act.length} active AX projects on track` +
-        (n("risk") ? `, ${n("risk")} at risk` : "") + (n("block") ? `, ${n("block")} blocked` : "") +
-        (asks.length ? `. ${asks.length} need${asks.length === 1 ? "s" : ""} a decision.` : ".")
+        (n("risk") ? `, ${n("risk")} at risk` : "") + (n("block") ? `, ${n("block")} blocked` : "") + "."
       : "No projects yet.";
 
     const K = [["Active projects", act.length, ""], ["On track", n("ok"), "ok"], ["At risk", n("risk"), "risk"],
@@ -122,22 +137,20 @@
     $("#kpis").innerHTML = K.map(([l, v, c]) => `<div class="kpi"><b class="num ${c}">${v}</b><span>${l}</span></div>`).join("");
     $("#phh").innerHTML = PH.map((p) => `<span>${p}</span>`).join("");
 
-    $("#pipe").innerHTML = ps.length ? ps.map((p) => {
+    const used = [...new Set(P.map((p) => p.department).filter(Boolean))].sort();
+    if (fD && !used.includes(fD)) fD = "";
+    $("#fD").innerHTML = `<option value="">All departments</option>` + used.map((d) => `<option value="${esc(d)}"${d === fD ? " selected" : ""}>${esc(d)}</option>`).join("");
+    const shown = ps.filter((p) => !fD || p.department === fD);
+    $("#pipe").innerHTML = shown.length ? shown.map((p) => {
       const i = Math.max(0, PH.indexOf(p.phase)), c = stc(p.status), pct = (k) => (k / (PH.length - 1)) * 100;
-      const oc = openC(p.id);
+      const oc = openAll(p.id);
       return `<button class="row" data-p="${esc(p.id)}">
-        <div><b>${esc(p.name)}</b><small>${esc(p.area)}</small><span class="pill ${c}">${ST[c]} · ${esc(PH[i])}</span>${oc ? ` <span class="badge">${oc} comment${oc > 1 ? "s" : ""}</span>` : ""}</div>
+        <div><b>${esc(p.name)}</b><small>${esc(p.area)}</small>${p.department ? `<span class="dept">${esc(p.department)}</span>` : ""}
+          <div class="chips"><span class="pill ${c}">${ST[c]} · ${esc(PH[i])}</span>${oc ? `<span class="badge">${oc} comment${oc > 1 ? "s" : ""}</span>` : ""}</div></div>
         <div class="track ${c}" aria-label="Phase ${esc(PH[i])} of ${PH.length}"><span class="fill" style="width:${pct(i)}%"></span>${PH.map((_, k) => `<span class="st${k <= i ? " on" : ""}" style="left:${pct(k)}%"></span>`).join("")}<span class="cur" style="left:${pct(i)}%"></span></div>
         <div class="ms">${esc(p.next) || "Next milestone not set"}<br><em>${p.next_date ? "by " + esc(fd(p.next_date)) : "date to confirm"}</em>${p.blocker ? `<br><span class="block">Blocker: ${esc(p.blocker)}</span>` : ""}</div>
       </button>`;
-    }).join("") : `<p class="empty">No projects yet.</p>`;
-
-    $("#askN").textContent = asks.length;
-    $("#asks").innerHTML = asks.length ? asks.map((p) => {
-      const oc = openC(p.id);
-      return `<div class="ask"><b>${esc(p.name)}</b><p>${esc(p.ceo_ask)}</p>
-        <div class="meta"><span>${oc ? oc + " open comment" + (oc > 1 ? "s" : "") : "No reply yet"}</span><button class="small" data-reply="${esc(p.id)}">Reply</button></div></div>`;
-    }).join("") : `<p class="empty">Nothing waiting on a decision.</p>`;
+    }).join("") : `<p class="empty">${P.length ? "No projects in this department." : "No projects yet."}</p>`;
 
     const lg = U.filter((u) => days(u.date) <= 14).sort((a, b) => String(b.date).localeCompare(a.date));
     $("#log").innerHTML = lg.length
@@ -154,7 +167,8 @@
       const L = ft.filter((t) => (t.status || "todo") === s);
       return `<div class="col"><h3>${TL[s]}<span>${L.length}</span></h3>${L.map((t) => {
         const lt = s !== "done" && t.due && days(t.due) > 0;
-        return `<button class="task" data-t="${esc(t.id)}"><b>${esc(t.title)}</b><small><span>${esc(pn(t.project_id))}</span><span>${esc(t.owner || "Unassigned")}</span>${t.due ? `<span class="${lt ? "late" : ""}">${lt ? "Overdue · " : "Due "}${esc(fd(t.due))}</span>` : ""}</small></button>`;
+        const oc = tComments(t.id).filter((c) => !c.resolved).length;
+        return `<button class="task" data-t="${esc(t.id)}"><b>${esc(t.title)}</b><small><span>${esc(pn(t.project_id))}</span><span>${esc(t.owner || "Unassigned")}</span>${t.due ? `<span class="${lt ? "late" : ""}">${lt ? "Overdue · " : "Due "}${esc(fd(t.due))}</span>` : ""}${oc ? `<span class="badge">${oc} comment${oc > 1 ? "s" : ""}</span>` : ""}</small></button>`;
       }).join("") || `<p class="empty">Nothing here.</p>`}</div>`;
     }).join("");
 
@@ -172,12 +186,10 @@
     const ps = sortedP(), n = (s) => P.filter((p) => stc(p.status) === s).length;
     let o = `AX projects – weekly update (${fd(today())} ${today().slice(0, 4)})\n\n`;
     o += `Summary: ${P.filter((p) => p.status !== "done").length} active projects – ${n("ok")} on track, ${n("risk")} at risk, ${n("block")} blocked.\n`;
-    const a = ps.filter((p) => p.ceo_ask);
-    if (a.length) o += `\nNeeds your decision:\n` + a.map((p) => `• ${p.name}: ${p.ceo_ask}`).join("\n") + "\n";
     o += `\nBy project:\n`;
     for (const p of ps) {
       const wk = U.filter((u) => u.project_id === p.id && days(u.date) <= 7);
-      o += `\n${p.name} [${ST[stc(p.status)]} · ${p.phase || "Idea"}]\n`;
+      o += `\n${p.name}${p.department ? " (" + p.department + ")" : ""} [${ST[stc(p.status)]} · ${p.phase || "Idea"}]\n`;
       o += wk.length ? wk.map((u) => `  – ${u.text}`).join("\n") + "\n" : `  – No change this week\n`;
       if (p.next) o += `  Next: ${p.next}${p.next_date ? " (by " + fd(p.next_date) + ")" : ""}\n`;
       if (p.blocker) o += `  Blocker: ${p.blocker}\n`;
@@ -187,63 +199,80 @@
 
   // ---------- dialogs ----------
   const ov = $("#ov"), dlg = $("#dlg");
-  const close = () => { ov.classList.remove("show"); dlg.innerHTML = ""; openId = null; };
+  const close = () => { ov.classList.remove("show"); dlg.innerHTML = ""; openKind = openId = null; };
   ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && ov.classList.contains("show")) close(); });
   const opt = (arr, v, lab) => arr.map((x) => `<option value="${esc(x)}"${x === v ? " selected" : ""}>${esc(lab ? lab[x] : x)}</option>`).join("");
   const confirmTwice = (btn, fn) => { btn.onclick = () => { if (btn.dataset.c) fn(); else { btn.dataset.c = "1"; btn.textContent = "Click again to delete"; } }; };
+  const commentBlock = `<div class="sec" id="cmsec"><h3>Comments</h3><div id="cmlist"></div>
+    <form class="cmf" id="cmf"><textarea id="cm-body" maxlength="4000" placeholder="Write a comment or question" required></textarea><button>Post</button></form></div>`;
 
-  function openP(id, focusComments) {
+  function wireComments(projectId, taskId) {
+    renderComments();
+    $("#cmf").onsubmit = async (e) => {
+      e.preventDefault();
+      const body = $("#cm-body").value.trim();
+      if (!body) return;
+      const b = e.target.querySelector("button");
+      b.disabled = true;
+      const row = { project_id: projectId, body };
+      if (taskId) row.task_id = taskId;
+      const { error } = await sb.from("comments").insert(row);
+      b.disabled = false;
+      if (error) return fail(error);
+      $("#cm-body").value = "";
+      await load();
+    };
+  }
+
+  function renderComments() {
+    const el = $("#cmlist");
+    if (!el || !openId) return;
+    const list = openKind === "task" ? tComments(openId) : pComments(openId);
+    el.innerHTML = list.length ? list.map((c) => {
+      const mine = c.author === me;
+      return `<div class="cm${c.resolved ? " res" : ""}"><div class="h"><span><b>${esc(nm(c.author))}</b> · ${esc(fd(c.created_at))}</span>${c.resolved ? "<span>Resolved</span>" : ""}</div>
+        <p>${esc(c.body)}</p>
+        <div class="ca">${(canEdit() || mine) ? `<button class="ghost small" data-res="${esc(c.id)}" data-val="${c.resolved ? "0" : "1"}">${c.resolved ? "Reopen" : "Resolve"}</button>` : ""}${(role === "owner" || mine) ? `<button class="ghost small" data-del="${esc(c.id)}">Delete</button>` : ""}</div></div>`;
+    }).join("") : `<p class="empty">No comments yet.</p>`;
+  }
+
+  function openP(id) {
     const p = P.find((x) => x.id === id) || { phase: "Idea", status: "ok" };
     const ro = !canEdit(), dis = ro ? " disabled" : "";
     const h = U.filter((u) => u.project_id === id).sort((a, b) => String(b.date).localeCompare(a.date));
-    openId = id || null;
+    const taskNotes = id ? T.filter((t) => t.project_id === id).reduce((s, t) => s + tComments(t.id).filter((c) => !c.resolved).length, 0) : 0;
+    openKind = id ? "project" : null; openId = id || null;
     dlg.innerHTML = `<h2>${id ? esc(p.name) : "New project"}</h2>
       <form class="f" id="pf">
         <label class="w2">Project name<input id="p-name" required maxlength="120" value="${esc(p.name)}"${dis}></label>
         <label>Client or area<input id="p-area" value="${esc(p.area)}"${dis}></label>
+        <label>Related department<input id="p-dept" list="deptlist" value="${esc(p.department)}"${dis}><datalist id="deptlist">${depts().map((d) => `<option value="${esc(d)}">`).join("")}</datalist></label>
         <label>Owner<input id="p-owner" value="${esc(p.owner)}"${dis}></label>
         <label>Phase<select id="p-phase"${dis}>${opt(PH, p.phase)}</select></label>
         <label>Status<select id="p-status"${dis}>${opt(Object.keys(ST), stc(p.status), ST)}</select></label>
-        <label>Next milestone<input id="p-next" value="${esc(p.next)}"${dis}></label>
         <label>Milestone date<input id="p-date" type="date" value="${esc(p.next_date)}"${dis}></label>
+        <label class="w2">Next milestone<input id="p-next" value="${esc(p.next)}"${dis}></label>
         <label class="w2">Blocker<input id="p-block" value="${esc(p.blocker)}"${dis}></label>
-        <label class="w2">Decision needed from CEO<input id="p-ask" value="${esc(p.ceo_ask)}"${dis}></label>
         <label class="w2">Summary<textarea id="p-sum"${dis}>${esc(p.summary)}</textarea></label>
         ${!ro ? `<label class="w2">Log an update<textarea id="p-upd" placeholder="What changed this week?"></textarea></label>` : ""}
       </form>
       <div class="acts"><div>${id && !ro ? `<button class="ghost" id="pdel">Delete project</button>` : ""}</div>
         <div><button class="ghost" id="pcl">Close</button>${ro ? "" : `<button id="psv">Save</button>`}</div></div>
-      ${id ? `<div class="sec" id="cmsec"><h3>Comments</h3><div id="cmlist"></div>
-        <form class="cmf" id="cmf"><textarea id="cm-body" maxlength="4000" placeholder="Ask a question or give a decision" required></textarea><button>Post</button></form></div>
-      <div class="sec"><h3>History</h3>${h.length ? h.map((u) => `<p><b>${esc(fd(u.date))}</b> · ${esc(u.text)}</p>`).join("") : `<p class="empty">No updates logged yet.</p>`}</div>` : ""}`;
+      ${id ? commentBlock + (taskNotes ? `<p class="sub">Plus ${taskNotes} open comment${taskNotes > 1 ? "s" : ""} on this project's tasks. See the Tasks view.</p>` : "") +
+        `<div class="sec"><h3>History</h3>${h.length ? h.map((u) => `<p><b>${esc(fd(u.date))}</b> · ${esc(u.text)}</p>`).join("") : `<p class="empty">No updates logged yet.</p>`}</div>` : ""}`;
     ov.classList.add("show");
     $("#pcl").onclick = close;
-    if (id) {
-      renderComments(id);
-      $("#cmf").onsubmit = async (e) => {
-        e.preventDefault();
-        const body = $("#cm-body").value.trim();
-        if (!body) return;
-        const b = e.target.querySelector("button");
-        b.disabled = true;
-        const { error } = await sb.from("comments").insert({ project_id: id, body });
-        b.disabled = false;
-        if (error) return fail(error);
-        $("#cm-body").value = "";
-        await load();
-      };
-      if (focusComments) setTimeout(() => { $("#cmsec").scrollIntoView({ block: "start" }); $("#cm-body").focus(); }, 50);
-    }
+    if (id) wireComments(id, null);
     const sv = $("#psv");
     if (sv) sv.onclick = async () => {
       const name = $("#p-name").value.trim();
       if (!name) { $("#p-name").focus(); return; }
       const d = {
-        name, area: $("#p-area").value.trim(), owner: $("#p-owner").value.trim(),
+        name, area: $("#p-area").value.trim(), department: $("#p-dept").value.trim(), owner: $("#p-owner").value.trim(),
         phase: $("#p-phase").value, status: $("#p-status").value,
         next: $("#p-next").value.trim(), next_date: $("#p-date").value || null,
-        blocker: $("#p-block").value.trim(), ceo_ask: $("#p-ask").value.trim(), summary: $("#p-sum").value.trim(),
+        blocker: $("#p-block").value.trim(), summary: $("#p-sum").value.trim(),
         updated_at: new Date().toISOString(),
       };
       sv.disabled = true;
@@ -272,23 +301,12 @@
     });
   }
 
-  function renderComments(id) {
-    const list = C.filter((c) => c.project_id === id);
-    const el = $("#cmlist");
-    if (!el) return;
-    el.innerHTML = list.length ? list.map((c) => {
-      const mine = c.author === me;
-      return `<div class="cm${c.resolved ? " res" : ""}"><div class="h"><span><b>${esc(nm(c.author))}</b> · ${esc(fd(c.created_at))}</span>${c.resolved ? "<span>Resolved</span>" : ""}</div>
-        <p>${esc(c.body)}</p>
-        <div class="ca">${(canEdit() || mine) ? `<button class="ghost small" data-res="${esc(c.id)}" data-v="${c.resolved ? "0" : "1"}">${c.resolved ? "Reopen" : "Resolve"}</button>` : ""}${(role === "owner" || mine) ? `<button class="ghost small" data-del="${esc(c.id)}">Delete</button>` : ""}</div></div>`;
-    }).join("") : `<p class="empty">No comments yet.</p>`;
-  }
-
   function openT(id) {
+    if (!P.length) { msg("Add a project first."); return; }
     const t = T.find((x) => x.id === id) || { status: "todo", project_id: fP || (sortedP()[0] || {}).id };
     const ro = !canEdit(), dis = ro ? " disabled" : "";
-    if (!P.length) { msg("Add a project first."); return; }
-    dlg.innerHTML = `<h2>${id ? (ro ? "Task" : "Edit task") : "New task"}</h2>
+    openKind = id ? "task" : null; openId = id || null;
+    dlg.innerHTML = `<h2>${id ? esc(t.title) : "New task"}</h2>
       <form class="f">
         <label class="w2">Task<input id="t-title" required maxlength="300" value="${esc(t.title)}"${dis}></label>
         <label>Project<select id="t-p"${dis}>${sortedP().map((p) => `<option value="${esc(p.id)}"${p.id === t.project_id ? " selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>
@@ -297,9 +315,11 @@
         <label>Due date<input id="t-d" type="date" value="${esc(t.due)}"${dis}></label>
       </form>
       <div class="acts"><div>${id && !ro ? `<button class="ghost" id="tdel">Delete</button>` : ""}</div>
-        <div><button class="ghost" id="tcl">Close</button>${ro ? "" : `<button id="tsv">Save</button>`}</div></div>`;
+        <div><button class="ghost" id="tcl">Close</button>${ro ? "" : `<button id="tsv">Save</button>`}</div></div>
+      ${id ? commentBlock : ""}`;
     ov.classList.add("show");
     $("#tcl").onclick = close;
+    if (id) wireComments(t.project_id, id);
     const sv = $("#tsv");
     if (sv) sv.onclick = async () => {
       const title = $("#t-title").value.trim();
@@ -323,10 +343,31 @@
     });
   }
 
+  function openPw() {
+    openKind = openId = null;
+    dlg.innerHTML = `<h2>Set your password</h2>
+      <p class="sub" style="margin-top:0">Use it to sign in with your email and password instead of a link.</p>
+      <form class="f" id="pwf">
+        <label>New password<input id="pw1" type="password" autocomplete="new-password" minlength="8" required></label>
+        <label>Repeat it<input id="pw2" type="password" autocomplete="new-password" minlength="8" required></label>
+      </form>
+      <div id="pwmsg" class="sub"></div>
+      <div class="acts"><div></div><div><button class="ghost" id="pwc">Close</button><button id="pws">Save password</button></div></div>`;
+    ov.classList.add("show");
+    $("#pwc").onclick = close;
+    $("#pws").onclick = async () => {
+      const a = $("#pw1").value, b = $("#pw2").value, m = $("#pwmsg");
+      if (a.length < 8) { m.textContent = "Use at least 8 characters."; return; }
+      if (a !== b) { m.textContent = "The two passwords don't match."; return; }
+      $("#pws").disabled = true;
+      const { error } = await sb.auth.updateUser({ password: a });
+      $("#pws").disabled = false;
+      m.textContent = error ? "Couldn't save: " + error.message : "Saved. Next time, sign in with your email and this password.";
+    };
+  }
+
   // ---------- events ----------
   document.addEventListener("click", async (e) => {
-    const rp = e.target.closest("[data-reply]");
-    if (rp) { openP(rp.dataset.reply, true); return; }
     const r = e.target.closest(".row");
     if (r) { openP(r.dataset.p); return; }
     const t = e.target.closest(".task");
@@ -334,7 +375,7 @@
     const res = e.target.closest("[data-res]");
     if (res) {
       res.disabled = true;
-      const { error } = await sb.from("comments").update({ resolved: res.dataset.v === "1" }).eq("id", res.dataset.res);
+      const { error } = await sb.from("comments").update({ resolved: res.dataset.val === "1" }).eq("id", res.dataset.res);
       if (error) { res.disabled = false; return fail(error); }
       await load();
       return;
@@ -369,13 +410,15 @@
     const { error } = await sb.from("members").insert({ email, name: $("#m-name").value.trim(), role: $("#m-role").value });
     if (error) return fail(error);
     e.target.reset();
-    msg(`Added ${email}. They can now sign in with that address.`);
+    msg(`Added ${email}. Create their login in Supabase (Authentication > Users > Add user), or they can use a sign-in link.`);
     await load();
   });
   $("#addP").onclick = () => openP("");
   $("#addT").onclick = () => openT("");
+  $("#pw").onclick = openPw;
   $("#fP").onchange = (e) => { fP = e.target.value; render(); };
   $("#fO").onchange = (e) => { fO = e.target.value; render(); };
+  $("#fD").onchange = (e) => { fD = e.target.value; render(); };
   $("#copy").onclick = async () => {
     const b = $("#copy");
     try { await navigator.clipboard.writeText(digest()); b.textContent = "Copied"; }

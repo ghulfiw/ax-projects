@@ -51,6 +51,46 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .pill::before{content:"";width:9px;height:9px;border-radius:50%;background:currentColor}
 .ms{font-size:13px;line-height:1.4}
 .ms em{font-style:normal;color:var(--mut);white-space:nowrap}
+.rmhead{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.rmhead h2{font-size:22px}
+.rfil{display:flex;flex-wrap:wrap;gap:8px}
+.rfil button{min-height:40px;padding:8px 14px;font-size:14px;background:var(--bg);color:var(--navy);border:1.5px solid var(--line)}
+.rfil button[aria-pressed=true]{background:var(--navyf);color:#fff;border-color:var(--navyf)}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--mut)}
+.legend span{display:inline-flex;gap:6px;align-items:center}
+.lg{display:inline-block;width:14px;height:10px;border-radius:3px}
+.lg-build,.sg-build{background:light-dark(#F3DE97,#6b5a1e)}
+.lg-pilot,.sg-pilot{background:light-dark(#C9DAF6,#2b4a7a)}
+.lg-live,.sg-live{background:var(--mint)}
+.lg-today{width:2px;height:14px;background:var(--block)}
+.gwrap{overflow-x:auto;background:var(--bg);border-radius:14px}
+.gantt{min-width:1080px}
+.grow{display:grid;grid-template-columns:290px minmax(0,1fr) 170px;gap:0 16px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center}
+button.grow{width:100%;background:transparent;color:var(--ink);text-align:left;border-radius:0;font:inherit;min-height:0;cursor:pointer}
+button.grow:hover{background:color-mix(in srgb,var(--card) 60%,transparent)}
+.ghead{font-size:13px;color:var(--mut);padding-top:12px}
+.qrow,.mrow{display:flex}
+.qrow span{font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden}
+.mrow span{overflow:hidden}
+.grp{padding:14px 16px 4px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.grp small{font-size:13px;color:var(--mut)}
+.goff b{display:block;font-weight:600;line-height:1.3}
+.goff span{display:block;font-size:13px;color:var(--mut);line-height:1.35}
+.goff .late{display:block;margin-top:2px;font-size:12px}
+.track2{position:relative;height:34px;border-radius:6px}
+.sg{position:absolute;top:5px;height:24px;border-radius:6px;font-size:12px;font-weight:500;color:light-dark(#1f2030,#eceef8);padding:0 8px;box-sizing:border-box;display:flex;align-items:center;white-space:nowrap;overflow:hidden}
+.tline{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--block)}
+.grev{text-align:right}
+.grev b{display:block;font-weight:600;white-space:nowrap}
+.conf{display:inline-block;margin-top:2px;font-size:12px;font-weight:600;border-radius:999px;padding:1px 9px;border:1px solid var(--line);color:var(--mut)}
+.conf-Quoted{background:var(--mint);color:var(--mintk);border-color:var(--mint)}
+.conf-Committed{background:var(--navyf);color:#fff;border-color:var(--navyf)}
+.offer{border:1.5px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.offer.gone{display:none}
+.ogrid{display:grid;grid-template-columns:110px repeat(2,minmax(0,1fr));gap:8px 10px;align-items:center;margin-top:8px}
+.ogrid>span{display:inline-flex;gap:6px;align-items:center;font-weight:500;font-size:14px}
+.ohint{margin:12px 0 0;font-size:12px;color:var(--mut)}
+.addoffer{width:100%;background:transparent;color:var(--navy);border:1.5px dashed var(--line);border-radius:12px}
 .hctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 .hctl select{width:auto;min-width:11em;font:500 14px Poppins,sans-serif}
 .dept{display:inline-block;font-size:12px;font-weight:600;color:var(--navy);background:color-mix(in srgb,var(--navyf) 10%,transparent);border-radius:6px;padding:1px 8px;margin:3px 0 4px;white-space:nowrap}
@@ -129,7 +169,7 @@ th{color:var(--mut);font-weight:500;font-size:13px;border-top:0}
 [hidden]{display:none!important}
 @media(max-width:900px){.kan{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:720px){.pipe-head{display:none}.row{grid-template-columns:minmax(0,1fr);gap:8px}.log li{grid-template-columns:5em minmax(0,1fr)}.log li .pn,.log li span:last-child{grid-column:2}.addm{grid-template-columns:minmax(0,1fr)}}
-@media(max-width:560px){.kan{grid-template-columns:minmax(0,1fr)}.f{grid-template-columns:minmax(0,1fr)}nav{width:100%;flex-wrap:nowrap;overflow-x:auto}nav a{flex:1 0 auto;justify-content:center;padding:9px 12px;white-space:nowrap;font-size:14px}.cmf{flex-direction:column;align-items:stretch}td,th{padding:8px 4px;font-size:13px}}
+@media(max-width:560px){.ogrid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.ogrid>span{grid-column:1/-1}.kan{grid-template-columns:minmax(0,1fr)}.f{grid-template-columns:minmax(0,1fr)}nav{width:100%;flex-wrap:nowrap;overflow-x:auto}nav a{flex:1 0 auto;justify-content:center;padding:9px 12px;white-space:nowrap;font-size:14px}.cmf{flex-direction:column;align-items:stretch}td,th{padding:8px 4px;font-size:13px}}
 @media(prefers-reduced-motion:no-preference){.fill{transition:width .5s ease}}
 </style>
 </head>
@@ -169,6 +209,7 @@ th{color:var(--mut);font-weight:500;font-size:13px;border-top:0}
  </div>
  <nav aria-label="Views">
   <a href="#portfolio" data-v="portfolio">Portfolio</a>
+  <a href="#roadmap" data-v="roadmap">Roadmap</a>
   <a href="#tasks" data-v="tasks">Tasks</a>
   <a href="#weekly" data-v="weekly">Weekly update</a>
   <a href="#members" data-v="members" class="own">Members</a>
@@ -188,6 +229,19 @@ th{color:var(--mut);font-weight:500;font-size:13px;border-top:0}
   <h2>Changed in the last 14 days</h2>
   <ul id="log"></ul>
  </div>
+</section>
+
+<section id="v-roadmap" hidden>
+ <div class="kpis" id="rkpis"></div>
+ <div class="panel">
+  <div class="rmhead">
+   <h2 style="margin:0">Roadmap by offer</h2>
+   <div class="rfil" id="rfil" role="group" aria-label="Filter offers by client"></div>
+   <div class="legend"><span><i class="lg lg-build"></i>Build</span><span><i class="lg lg-pilot"></i>Pilot or pitch</span><span><i class="lg lg-live"></i>Live</span><span><i class="lg lg-today"></i>Today</span></div>
+  </div>
+  <div class="gwrap"><div class="gantt" id="gantt"></div></div>
+ </div>
+ <p class="note">Each row is an offer. Click it to open the project, where editors set the months, business model and expected revenue under <b>Roadmap and business model</b>. A project still behind its planned stage shows as <b>At risk · behind roadmap</b>.</p>
 </section>
 
 <section id="v-tasks" hidden>

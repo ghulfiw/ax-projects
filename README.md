@@ -1,8 +1,9 @@
 # AX Project Tracker
 
-A small web app for tracking Cheil Indonesia's AX projects. It's live at https://cheil-id-ax.vercel.app and has four views:
+A small web app for tracking Cheil Indonesia's AX projects. It's live at https://cheil-id-ax.vercel.app and has five views:
 
 - **Portfolio:** where each project stands, with its client (SEIN, NSS or Internal) and related Cheil departments, what's blocked, and what changed recently. You can filter it by client and by department.
+- **Roadmap:** the business view, and where viewers land by default. Each offer (a project sold to SEIN or NSS, or used internally) has its business model, planned build, pilot and live months, and expected 2027 revenue with a confidence level. Totals sit on top. A project whose phase is behind its planned stage shows as *At risk · behind roadmap*.
 - **Tasks:** a board for the team.
 - **Weekly update:** a digest ready to copy into email or WhatsApp.
 - **Members:** who can sign in, and with which role. Only owners see it.
@@ -18,6 +19,7 @@ The app is plain HTML and JavaScript with no build step. Supabase holds the data
 | `config.js` | Supabase URL and public key |
 | `supabase/schema.sql` | Tables, roles and access rules. Run once on a new database. |
 | `supabase/migration-002.sql` | Adds task comments, removes the CEO-decision field, and loads the starting projects, tasks and updates. Run once, after schema.sql. |
+| `supabase/migration-004.sql` | Adds the `offers` table behind the Roadmap. Run once, after migration-003.sql. |
 | `supabase/migration-003.sql` | Lets a project have several departments, and adds the client field (SEIN, NSS or Internal, plus client team or name). Run once, after migration-002.sql. |
 
 ## Roles
@@ -40,7 +42,7 @@ They can change the password themselves in the app with **Set password**. Anyone
 
 ## Setting up from scratch
 
-1. **Supabase:** create a project. Put your email in the last line of `schema.sql`, run it in **SQL Editor**, then run `migration-002.sql` and `migration-003.sql`. Copy the Project URL and the publishable/anon key into `config.js`. Never use the secret or service_role key.
+1. **Supabase:** create a project. Put your email in the last line of `schema.sql`, run it in **SQL Editor**, then run `migration-002.sql`, `migration-003.sql` and `migration-004.sql`. Copy the Project URL and the publishable/anon key into `config.js`. Never use the secret or service_role key.
 2. **Sign-in URLs:** go to **Authentication → URL Configuration**.
    - Set **Site URL** to the app's address.
    - Under **Redirect URLs**, add the address followed by `/**`.

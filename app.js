@@ -4,7 +4,7 @@
   const ST = { ok: "On track", risk: "At risk", block: "Blocked", done: "Done" };
   const TS = ["todo", "doing", "review", "done"];
   const TL = { todo: "To do", doing: "In progress", review: "Review", done: "Done" };
-  const VIEWS = ["portfolio", "tasks", "weekly", "members"];
+  const VIEWS = ["portfolio", "roadmap", "tasks", "weekly", "members"];
   const DEPTS = ["Account", "Creative", "Strategy", "Digital", "Media", "New Business", "Data & Tech", "HR", "Finance", "IT"];
   const CL = { SEIN: "SEIN", NSS: "NSS", Internal: "Internal" };
   const CLL = { SEIN: "SEIN (Samsung)", NSS: "NSS (non-Samsung client)", Internal: "Internal (no client)" };
@@ -30,7 +30,8 @@
   }
   const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
 
-  let me = "", role = null, P = [], T = [], U = [], C = [], M = [], fP = "", fO = "", fD = "", fC = "", chan = null, rt = 0;
+  let me = "", role = null, P = [], T = [], U = [], C = [], M = [], O = [], fP = "", fO = "", fD = "", fC = "", fR = "", chan = null, rt = 0;
+  const keys = { portfolio: "", roadmap: "" };
   let openKind = null, openId = null; // which dialog is open, for live comment refresh
   const canEdit = () => role === "owner" || role === "editor";
   const sortedP = () => [...P].sort((a, b) => (a.sort ?? 99) - (b.sort ?? 99) || String(a.name).localeCompare(b.name));
@@ -44,6 +45,42 @@
   const tComments = (id) => C.filter((c) => c.task_id === id);
   const openAll = (pid) => C.filter((c) => c.project_id === pid && !c.resolved).length;
   const fail = (e) => { msg(e?.message ? "Couldn't save: " + e.message : "Couldn't save. Try again."); };
+
+  // ---------- roadmap helpers ----------
+  const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const mi = (d) => { if (!d) return null; const [y, m] = String(d).slice(0, 7).split("-").map(Number); return y * 12 + m - 1; };
+  const mlabel = (i) => MON[((i % 12) + 12) % 12] + " " + Math.floor(i / 12);
+  const ymv = (d) => (d ? String(d).slice(0, 7) : "");
+  const nowIdx = () => { const d = new Date(); return d.getFullYear() * 12 + d.getMonth() + (d.getDate() - 1) / new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); };
+  const PI = { Idea: 0, Scoping: 1, Build: 2, Pilot: 3, Live: 4 };
+  const offersOf = (pid) => O.filter((o) => o.project_id === pid).sort((a, b) => (a.sort ?? 99) - (b.sort ?? 99));
+  // A project is behind its roadmap when a planned stage has ended (or the next one was due to start)
+  // and the project's phase hasn't reached the next stage yet.
+  function behind(p) {
+    if (!p || stc(p.status) === "done") return "";
+    const t = nowIdx();
+    let need = 0, why = "";
+    const req = (lvl, txt) => { if (lvl > need) { need = lvl; why = txt; } };
+    for (const o of offersOf(p.id)) {
+      const bt = mi(o.build_to), pf = mi(o.pilot_from), pt = mi(o.pilot_to), lf = mi(o.live_from);
+      if (bt !== null && bt + 1 <= t) req(pf !== null ? 3 : 4, `build was planned to end in ${mlabel(bt)}`);
+      if (pf !== null && pf <= t) req(3, `pilot was planned to start in ${mlabel(pf)}`);
+      if (pt !== null && pt + 1 <= t) req(4, `pilot was planned to end in ${mlabel(pt)}`);
+      if (lf !== null && lf <= t) req(4, `go-live was planned for ${mlabel(lf)}`);
+    }
+    return (PI[p.phase] ?? 0) < need ? why : "";
+  }
+  const eff = (p) => { const s = stc(p.status); return s === "ok" && behind(p) ? "risk" : s; };
+  const effLabel = (p) => (stc(p.status) === "ok" && behind(p) ? "At risk · behind roadmap" : ST[stc(p.status)]);
+  const fmtRp = (n) => {
+    n = Number(n);
+    if (!isFinite(n)) return "";
+    if (n >= 1e9) return "Rp " + (n / 1e9).toFixed(n >= 1e10 ? 0 : 1).replace(/\.0$/, "") + "B";
+    if (n >= 1e6) return "Rp " + Math.round(n / 1e6) + "M";
+    return "Rp " + n.toLocaleString("en-US");
+  };
+  const MK = { SEIN: ["SEIN", "Samsung"], NSS: ["NSS", "Non-Samsung clients"], Internal: ["Internal", "Cheil efficiency, no client revenue"] };
+  const setKey = () => { const v = location.hash.slice(1); $("#key").textContent = v === "roadmap" || (!VIEWS.includes(v) && role === "viewer") ? keys.roadmap : keys.portfolio; };
 
   // ---------- auth ----------
   let startSeq = 0;
@@ -99,14 +136,14 @@
   // ---------- data ----------
   async function load() {
     const q = (t) => sb.from(t).select("*");
-    const [p, t, u, c, m] = await Promise.all([
+    const [p, t, u, c, m, o] = await Promise.all([
       q("projects"), q("tasks"), q("updates").order("date", { ascending: false }),
-      q("comments").order("created_at"), q("members").order("email"),
+      q("comments").order("created_at"), q("members").order("email"), q("offers").order("sort"),
     ]);
-    const err = [p, t, u, c, m].find((r) => r.error);
+    const err = [p, t, u, c, m, o].find((r) => r.error);
     if (err) msg("Couldn't load everything: " + err.error.message);
     else msg("");
-    P = p.data || []; T = t.data || []; U = u.data || []; C = c.data || []; M = m.data || [];
+    P = p.data || []; T = t.data || []; U = u.data || []; C = c.data || []; M = m.data || []; O = o.data || [];
     render();
     if (openKind && $("#cmlist")) renderComments();
   }
@@ -114,11 +151,13 @@
   // ---------- routing ----------
   function route() {
     let v = location.hash.slice(1);
-    if (!VIEWS.includes(v) || (v === "members" && role !== "owner")) v = "portfolio";
+    if (v === "members" && role !== "owner") v = "";
+    if (!VIEWS.includes(v)) v = role === "viewer" ? "roadmap" : "portfolio";
     for (const k of VIEWS) $("#v-" + k).hidden = k !== v;
     document.querySelectorAll("nav a").forEach((a) => {
       if (a.dataset.v === v) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
+    setKey();
   }
   window.addEventListener("hashchange", route);
 
@@ -126,13 +165,13 @@
   function render() {
     const ps = sortedP();
     const act = P.filter((p) => p.status !== "done");
-    const n = (s) => P.filter((p) => stc(p.status) === s).length;
+    const n = (s) => P.filter((p) => eff(p) === s).length;
     const open = T.filter((t) => t.status !== "done");
     const late = open.filter((t) => t.due && days(t.due) > 0);
 
     const last = [...P.map((p) => p.updated_at), ...U.map((u) => u.created_at)].filter(Boolean).sort().pop();
     $("#upd").textContent = last ? "last updated " + fd(last) + " " + String(last).slice(0, 4) : "no updates yet";
-    $("#key").textContent = P.length
+    keys.portfolio = P.length
       ? `${n("ok")} of ${act.length} active AX projects on track` +
         (n("risk") ? `, ${n("risk")} at risk` : "") + (n("block") ? `, ${n("block")} blocked` : "") + "."
       : "No projects yet.";
@@ -148,12 +187,12 @@
     $("#fC").innerHTML = `<option value="">All clients</option>` + Object.keys(CL).map((c) => `<option value="${c}"${c === fC ? " selected" : ""}>${CLL[c]}</option>`).join("");
     const shown = ps.filter((p) => (!fD || deps(p).includes(fD)) && (!fC || cl(p) === fC));
     $("#pipe").innerHTML = shown.length ? shown.map((p) => {
-      const i = Math.max(0, PH.indexOf(p.phase)), c = stc(p.status), pct = (k) => (k / (PH.length - 1)) * 100;
+      const i = Math.max(0, PH.indexOf(p.phase)), c = eff(p), why = behind(p), pct = (k) => (k / (PH.length - 1)) * 100;
       const oc = openAll(p.id);
       return `<button class="row" data-p="${esc(p.id)}">
         <div><b>${esc(p.name)}</b><small>${esc(p.area)}</small>
           <div class="chips tags"><span class="cl cl-${cl(p)}" title="Client">${esc(clientText(p))}</span>${deps(p).map((d) => `<span class="dept" title="Related department">${esc(d)}</span>`).join("")}</div>
-          <div class="chips"><span class="pill ${c}">${ST[c]} · ${esc(PH[i])}</span>${oc ? `<span class="badge">${oc} comment${oc > 1 ? "s" : ""}</span>` : ""}</div></div>
+          <div class="chips"><span class="pill ${c}"${why ? ` title="Behind roadmap: ${esc(why)}"` : ""}>${esc(effLabel(p))} · ${esc(PH[i])}</span>${oc ? `<span class="badge">${oc} comment${oc > 1 ? "s" : ""}</span>` : ""}</div></div>
         <div class="track ${c}" aria-label="Phase ${esc(PH[i])} of ${PH.length}"><span class="fill" style="width:${pct(i)}%"></span>${PH.map((_, k) => `<span class="st${k <= i ? " on" : ""}" style="left:${pct(k)}%"></span>`).join("")}<span class="cur" style="left:${pct(i)}%"></span></div>
         <div class="ms">${esc(p.next) || "Next milestone not set"}<br><em>${p.next_date ? "by " + esc(fd(p.next_date)) : "date to confirm"}</em>${p.blocker ? `<br><span class="block">Blocker: ${esc(p.blocker)}</span>` : ""}</div>
       </button>`;
@@ -180,6 +219,8 @@
     }).join("");
 
     $("#dig").textContent = digest();
+    renderRoadmap();
+    setKey();
 
     // members
     $("#mem").innerHTML = M.map((m) => `<tr>
@@ -188,15 +229,92 @@
       <td>${m.email === me ? `<span class="sub">You</span>` : `<button class="ghost small" data-rm="${esc(m.email)}">Remove</button>`}</td></tr>`).join("");
   }
 
+  function renderRoadmap() {
+    const t = nowIdx(), start = Math.floor(t), cy = Math.floor(start / 12);
+    let end = (start % 12 >= 9 ? cy + 1 : cy) * 12 + 11;
+    for (const o of O) for (const k of ["build_to", "pilot_to", "live_from"]) { const v = mi(o[k]); if (v !== null && v > end) end = v; }
+    end = Math.min(end, start + 23);
+    const N = end - start + 1, pct = (i) => ((i - start) / N) * 100;
+
+    const ext = O.filter((o) => o.market !== "Internal");
+    const sum = (arr) => arr.reduce((a, o) => a + (Number(o.revenue_2027) || 0), 0);
+    const ss = ext.filter((o) => o.market === "SEIN"), nss = ext.filter((o) => o.market === "NSS");
+    const unset = ext.filter((o) => o.revenue_2027 == null).length;
+    const in27 = (o) => { const l = mi(o.live_from); return l !== null && Math.floor(l / 12) === 2027; };
+    const upcoming = ext.filter((o) => mi(o.live_from) !== null && mi(o.live_from) >= Math.ceil(t)).sort((a, b) => mi(a.live_from) - mi(b.live_from))[0];
+    const total = sum(ext);
+    const K = [
+      [total ? fmtRp(total) : "Not set", "Expected 2027 revenue" + (unset ? ` · ${unset} offer${unset > 1 ? "s" : ""} without an estimate` : "")],
+      [sum(ss) ? fmtRp(sum(ss)) : "Not set", "from Samsung (SEIN)"],
+      [sum(nss) ? fmtRp(sum(nss)) : "Not set", "from NSS clients"],
+      [String(ext.filter(in27).length), "Offers going live in 2027"],
+      [upcoming ? mlabel(mi(upcoming.live_from)) : "–", upcoming ? "Next launch: " + (upcoming.name || pn(upcoming.project_id)) : "Next launch"],
+    ];
+    $("#rkpis").innerHTML = K.map(([v, l]) => `<div class="kpi"><b class="num">${esc(v)}</b><span>${esc(l)}</span></div>`).join("");
+    const nS = ss.filter(in27).length, nN = nss.filter(in27).length;
+    keys.roadmap = O.length
+      ? `2027: ${nS} offer${nS === 1 ? "" : "s"} go${nS === 1 ? "es" : ""} live for Samsung and ${nN} for NSS clients` +
+        (total ? `, with ${fmtRp(total)} expected revenue` : "") + (unset ? `; ${unset} still need${unset === 1 ? "s" : ""} a revenue estimate.` : ".")
+      : "No roadmap yet.";
+
+    $("#rfil").innerHTML = [["", "All offers"], ["SEIN", "SEIN"], ["NSS", "NSS"], ["Internal", "Internal"]]
+      .map(([k, l]) => `<button type="button" data-rf="${k}" aria-pressed="${fR === k}">${l}</button>`).join("");
+
+    const months = [];
+    for (let i = start; i <= end; i++) months.push(i);
+    const qs = [];
+    for (const i of months) {
+      const lab = "Q" + (Math.floor((i % 12) / 3) + 1) + " '" + String(Math.floor(i / 12)).slice(2);
+      const last = qs[qs.length - 1];
+      if (last && last.lab === lab) last.n++; else qs.push({ lab, n: 1 });
+    }
+    const grid = `background-image:repeating-linear-gradient(to right,var(--line) 0,var(--line) 1px,transparent 1px,transparent calc(100% / ${N}))`;
+    let html = `<div class="grow ghead"><span style="align-self:end">Offer and business model</span><div>
+      <div class="qrow">${qs.map((q) => `<span style="width:${(q.n / N) * 100}%">${q.lab}</span>`).join("")}</div>
+      <div class="mrow">${months.map((i) => `<span style="width:${100 / N}%">${MON[i % 12]}</span>`).join("")}</div></div>
+      <span style="align-self:end;text-align:right">2027 revenue</span></div>`;
+    const porder = (o) => (P.find((p) => p.id === o.project_id) || {}).sort ?? 99;
+    let rowsShown = 0;
+    for (const mk of ["SEIN", "NSS", "Internal"]) {
+      if (fR && fR !== mk) continue;
+      const rows = O.filter((o) => o.market === mk).sort((a, b) => porder(a) - porder(b) || (a.sort ?? 99) - (b.sort ?? 99));
+      if (!rows.length) continue;
+      html += `<div class="grp"><span class="cl cl-${mk}">${MK[mk][0]}</span><small>${MK[mk][1]}</small></div>`;
+      for (const o of rows) {
+        const p = P.find((x) => x.id === o.project_id);
+        const segs = [];
+        const add = (cls, a, b, label) => {
+          if (a === null) return;
+          const s0 = Math.max(a, start), e0 = Math.min(b, end + 1);
+          if (e0 <= s0) return;
+          segs.push(`<div class="sg sg-${cls}" style="left:calc(${pct(s0)}% + 1px);width:calc(${((e0 - s0) / N) * 100}% - 2px)">${label}</div>`);
+        };
+        const bf = mi(o.build_from), bt = mi(o.build_to), pf = mi(o.pilot_from), pt = mi(o.pilot_to), lf = mi(o.live_from);
+        add("build", bf, (bt ?? bf) + 1, "Build");
+        add("pilot", pf, (pt ?? pf) + 1, mk === "NSS" ? "Pilot or pitch" : "Pilot");
+        add("live", lf, end + 1, "Live");
+        const why = behind(p);
+        const rev = mk === "Internal" ? "–" : o.revenue_2027 == null ? "Not set" : Number(o.revenue_2027) === 0 ? "No direct fee" : fmtRp(o.revenue_2027);
+        const tag = mk === "Internal" ? `<span class="conf">Internal</span>` : `<span class="conf conf-${esc(o.confidence)}">${esc(o.confidence)}</span>`;
+        html += `<button type="button" class="grow" data-op="${esc(o.project_id)}"><div class="goff"><b>${esc(o.name || (p || {}).name)}</b><span>${esc(o.model)}</span>${why ? `<span class="late">Behind roadmap: ${esc(why)}</span>` : ""}</div>
+          <div class="track2" style="${grid}">${segs.join("")}<div class="tline" style="left:${pct(t)}%" aria-hidden="true"></div></div>
+          <div class="grev"><b>${esc(rev)}</b>${tag}</div></button>`;
+        rowsShown++;
+      }
+    }
+    if (!rowsShown) html += `<p class="empty" style="padding:16px">${O.length ? "No offers for this client." : "No roadmap yet. Open a project and add an offer under Roadmap and business model."}</p>`;
+    $("#gantt").innerHTML = html;
+  }
+
   function digest() {
     if (!P.length) return "No projects yet.";
-    const ps = sortedP(), n = (s) => P.filter((p) => stc(p.status) === s).length;
+    const ps = sortedP(), n = (s) => P.filter((p) => eff(p) === s).length;
     let o = `AX projects – weekly update (${fd(today())} ${today().slice(0, 4)})\n\n`;
     o += `Summary: ${P.filter((p) => p.status !== "done").length} active projects – ${n("ok")} on track, ${n("risk")} at risk, ${n("block")} blocked.\n`;
     o += `\nBy project:\n`;
     for (const p of ps) {
       const wk = U.filter((u) => u.project_id === p.id && days(u.date) <= 7);
-      o += `\n${p.name} [${ST[stc(p.status)]} · ${p.phase || "Idea"}]\n  Client: ${clientText(p)}${deps(p).length ? " · Departments: " + deps(p).join(", ") : ""}\n`;
+      o += `\n${p.name} [${effLabel(p)} · ${p.phase || "Idea"}]\n  Client: ${clientText(p)}${deps(p).length ? " · Departments: " + deps(p).join(", ") : ""}\n`;
       o += wk.length ? wk.map((u) => `  – ${u.text}`).join("\n") + "\n" : `  – No change this week\n`;
       if (p.next) o += `  Next: ${p.next}${p.next_date ? " (by " + fd(p.next_date) + ")" : ""}\n`;
       if (p.blocker) o += `  Blocker: ${p.blocker}\n`;
@@ -244,9 +362,62 @@
     }).join("") : `<p class="empty">No comments yet.</p>`;
   }
 
+  const offerCard = (o, ro) => {
+    const dis = ro ? " disabled" : "";
+    const mv = (k, lab) => `<input type="month" data-k="${k}" aria-label="${lab}" placeholder="YYYY-MM" value="${esc(ymv(o[k]))}"${dis}>`;
+    return `<div class="offer" data-id="${esc(o.id || "")}">
+      <div class="f">
+        <label>Offer name<input data-k="name" maxlength="160" value="${esc(o.name)}" placeholder="e.g. Business Intelligence for NSS"${dis}></label>
+        <label>For<select data-k="market"${dis}>${["SEIN", "NSS", "Internal"].map((m) => `<option value="${m}"${m === (o.market || "SEIN") ? " selected" : ""}>${CLL[m]}</option>`).join("")}</select></label>
+        <label class="w2">Business model<input data-k="model" maxlength="300" value="${esc(o.model)}" placeholder="e.g. Subscription, per-video rate card, build fee + monthly fee"${dis}></label>
+      </div>
+      <div class="ogrid">
+        <span><i class="lg lg-build"></i>Build</span>${mv("build_from", "Build from")}${mv("build_to", "Build to")}
+        <span><i class="lg lg-pilot"></i>Pilot</span>${mv("pilot_from", "Pilot from")}${mv("pilot_to", "Pilot to")}
+        <span><i class="lg lg-live"></i>Live from</span>${mv("live_from", "Live from")}<i></i>
+      </div>
+      <div class="f" style="margin-top:12px">
+        <label>Expected 2027 revenue (Rp)<input data-k="revenue_2027" inputmode="numeric" value="${o.revenue_2027 == null ? "" : esc(Number(o.revenue_2027).toLocaleString("en-US"))}" placeholder="Not set"${dis}></label>
+        <label>Confidence<select data-k="confidence"${dis}>${["Target", "Quoted", "Committed"].map((c) => `<option${c === (o.confidence || "Target") ? " selected" : ""}>${c}</option>`).join("")}</select></label>
+      </div>
+      ${ro ? "" : `<div class="acts" style="margin-top:8px"><div></div><div><button type="button" class="ghost small" data-rmoffer>Remove offer</button></div></div>`}
+    </div>`;
+  };
+
+  // Read the offer cards in the open project dialog; throws with a readable message when a month is wrong.
+  function collectOffers() {
+    const out = { rows: [], dels: [] };
+    let i = 0;
+    for (const c of document.querySelectorAll("#offers .offer")) {
+      const id = c.dataset.id;
+      if (c.dataset.del) { if (id) out.dels.push(id); continue; }
+      const v = (k) => (c.querySelector(`[data-k="${k}"]`)?.value || "").trim();
+      const mon = (k) => {
+        const x = v(k);
+        if (!x) return null;
+        if (!/^\d{4}-\d{2}$/.test(x)) throw new Error(`months must look like 2027-03 (found "${x}")`);
+        return x + "-01";
+      };
+      const digits = v("revenue_2027").replace(/[^\d]/g, "");
+      const market = v("market") || "SEIN";
+      const row = {
+        name: v("name"), market, model: v("model"),
+        build_from: mon("build_from"), build_to: mon("build_to"), pilot_from: mon("pilot_from"), pilot_to: mon("pilot_to"), live_from: mon("live_from"),
+        revenue_2027: market === "Internal" || !digits ? null : Number(digits), confidence: v("confidence") || "Target",
+      };
+      const empty = !row.name && !row.model && !row.build_from && !row.build_to && !row.pilot_from && !row.pilot_to && !row.live_from && row.revenue_2027 == null;
+      if (!id && empty) continue;
+      if ((row.build_from && row.build_to && row.build_to < row.build_from) || (row.pilot_from && row.pilot_to && row.pilot_to < row.pilot_from))
+        throw new Error(`"${row.name || "an offer"}" has a stage that ends before it starts`);
+      row.sort = ++i;
+      out.rows.push({ id, row });
+    }
+    return out;
+  }
+
   const deptBox = (d, on, ro) => `<label class="ck"><input type="checkbox" value="${esc(d)}"${on ? " checked" : ""}${ro ? " disabled" : ""}><span>${esc(d)}</span></label>`;
 
-  function openP(id) {
+  function openP(id, focus) {
     const p = P.find((x) => x.id === id) || { phase: "Idea", status: "ok" };
     const ro = !canEdit(), dis = ro ? " disabled" : "";
     const h = U.filter((u) => u.project_id === id).sort((a, b) => String(b.date).localeCompare(a.date));
@@ -263,12 +434,19 @@
         <label>Owner<input id="p-owner" value="${esc(p.owner)}"${dis}></label>
         <label>Phase<select id="p-phase"${dis}>${opt(PH, p.phase)}</select></label>
         <label>Status<select id="p-status"${dis}>${opt(Object.keys(ST), stc(p.status), ST)}</select></label>
+        ${id && behind(p) ? `<p class="w2 late" style="margin:0;font-size:13px">Behind roadmap: ${esc(behind(p))}. It shows as At risk until the phase moves on or the roadmap below changes.</p>` : ""}
         <label>Milestone date<input id="p-date" type="date" value="${esc(p.next_date)}"${dis}></label>
         <label class="w2">Next milestone<input id="p-next" value="${esc(p.next)}"${dis}></label>
         <label class="w2">Blocker<input id="p-block" value="${esc(p.blocker)}"${dis}></label>
         <label class="w2">Summary<textarea id="p-sum"${dis}>${esc(p.summary)}</textarea></label>
         ${!ro ? `<label class="w2">Log an update<textarea id="p-upd" placeholder="What changed this week?"></textarea></label>` : ""}
       </form>
+      <div class="sec" id="rmsec"><h3>Roadmap and business model</h3>
+        <p class="sub" style="margin-top:0">One project can have several offers, e.g. the same product for SEIN and for NSS clients. Each offer is a row on the Roadmap.</p>
+        <div id="offers">${id ? offersOf(id).map((o) => offerCard(o, ro)).join("") : ""}</div>
+        ${ro ? (id && offersOf(id).length ? "" : `<p class="empty">No roadmap set for this project yet.</p>`) : `<button type="button" class="addoffer" id="addoffer">+ Add offer</button>`}
+        <p class="ohint">Confidence: <b>Target</b> = our estimate · <b>Quoted</b> = price sent to the client · <b>Committed</b> = signed or approved</p>
+      </div>
       <div class="acts"><div>${id && !ro ? `<button class="ghost" id="pdel">Delete project</button>` : ""}</div>
         <div><button class="ghost" id="pcl">Close</button>${ro ? "" : `<button id="psv">Save</button>`}</div></div>
       ${id ? commentBlock + (taskNotes ? `<p class="sub">Plus ${taskNotes} open comment${taskNotes > 1 ? "s" : ""} on this project's tasks. See the Tasks view.</p>` : "") +
@@ -276,6 +454,12 @@
     ov.classList.add("show");
     $("#pcl").onclick = close;
     if (id) wireComments(id, null);
+    const ao = $("#addoffer");
+    if (ao) ao.onclick = () => {
+      const c = $("#p-client").value;
+      $("#offers").insertAdjacentHTML("beforeend", offerCard({ market: CL[c] ? c : "SEIN", name: $("#p-name").value.trim() }, false));
+    };
+    if (focus === "roadmap") setTimeout(() => $("#rmsec").scrollIntoView({ block: "start" }), 50);
     const ad = $("#p-adddept");
     if (ad) {
       const add = () => {
@@ -302,6 +486,8 @@
         blocker: $("#p-block").value.trim(), summary: $("#p-sum").value.trim(),
         updated_at: new Date().toISOString(),
       };
+      let offers;
+      try { offers = collectOffers(); } catch (x) { msg("Couldn't save: " + x.message + "."); return; }
       sv.disabled = true;
       let pid = id, error;
       if (id) ({ error } = await sb.from("projects").update(d).eq("id", id));
@@ -313,6 +499,11 @@
       if (!error) {
         const u = $("#p-upd")?.value.trim();
         if (u && pid) ({ error } = await sb.from("updates").insert({ project_id: pid, text: u, date: today() }));
+      }
+      for (const oid of offers.dels) { if (error) break; ({ error } = await sb.from("offers").delete().eq("id", oid)); }
+      for (const { id: oid, row } of offers.rows) {
+        if (error || !pid) break;
+        ({ error } = oid ? await sb.from("offers").update(row).eq("id", oid) : await sb.from("offers").insert({ ...row, project_id: pid }));
       }
       sv.disabled = false;
       if (error) return fail(error);
@@ -395,6 +586,12 @@
 
   // ---------- events ----------
   document.addEventListener("click", async (e) => {
+    const rf = e.target.closest("[data-rf]");
+    if (rf) { fR = rf.dataset.rf; renderRoadmap(); return; }
+    const go = e.target.closest("[data-op]");
+    if (go) { openP(go.dataset.op, "roadmap"); return; }
+    const rmo = e.target.closest("[data-rmoffer]");
+    if (rmo) { const c = rmo.closest(".offer"); c.dataset.del = "1"; c.classList.add("gone"); return; }
     const r = e.target.closest(".row");
     if (r) { openP(r.dataset.p); return; }
     const t = e.target.closest(".task");
